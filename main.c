@@ -181,6 +181,9 @@ void executeCommand(char **args, int numArgs) {
     	cd(args[1]);
     } else if (strcmp("jobs", args[0]) == 0) {
     	printJobs();
+    } else if (strcmp("|", args[1]) == 0) {
+	printf("pipes");
+    	pipes(args);
     } else {
     
     }
