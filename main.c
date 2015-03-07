@@ -132,6 +132,44 @@ void printJobs() {
     }
 }
 
+void pipes(char **args) {
+	int pipefd[2];
+	char *first_arg = args[0];
+	char *second_arg = args[2];
+	char *argv1[] = {first_arg, NULL};
+	char *argv2[] = {second_arg, NULL};
+	int pid;
+    
+		if (pipe(pipefd) == -1) {
+			perror("pipe");
+			exit(1);
+		}
+      
+		pid_t pid_1, pid_2;
+    
+		pid_1 = fork();
+		if (pid_1 == 0) {
+			dup2(pipefd[1], STDOUT_FILENO);
+			close(pipefd[0]);
+			close(pipefd[1]);
+				if (execvp(first_arg, argv1) == -1)
+					perror("quash");
+			//parser(trimWhiteSpaces(first_arg));
+			exit(0);
+		}
+    
+		pid_2 = fork();
+		if (pid_2 == 0) {
+			dup2(pipefd[0], STDIN_FILENO);
+			close(pipefd[1]);
+			close(pipefd[0]);
+			if (execvp(second_arg, argv2) == -1)
+				perror("quash");
+			//parser(trimWhiteSpaces(second_arg));
+			//exit(0);
+		}
+}
+
 void executeExternalCommand(char **args) {
 
 }
