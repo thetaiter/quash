@@ -4,6 +4,11 @@
 #include <signal.h>
 #include <readline/readline.h>
 
+void handleSigInt(int sig) {
+	printf("\n\nSIGINT signal %i received. Quitting quash.\n\n", sig);
+	exit(0);
+}
+
 char *trimWhiteSpaces(char *str) {
     // Move string pointer to first character that is not a space
     while(isspace(*str)) {
@@ -31,7 +36,7 @@ char *trimWhiteSpaces(char *str) {
     return str;
 }
 
-char **tokenize(char* input) {
+char **tokenize(char *input) {
 	char **ret = NULL;
 	char *temp = strtok(input, " ");
 	int i, numSpaces = 0;
@@ -61,23 +66,64 @@ char **tokenize(char* input) {
 	return ret;
 }
 
-void handleSigInt(int sig) {
-	printf("\n\nSIGINT signal %i received. Quitting quash.\n\n", sig);
-	exit(0);
+void set(char **args) {
+    // Get the variable to be set and the value to set it to
+    char *newVar = args[1];
+    char *value = args[2];
+    setenv(newVar, value, 0);
+
+    if (strcmp(value, getenv(newVar)) == 0) {
+        printf("\nNew environment variable '%s' was set to the value '%s' successfully.\n\n", newVar, getenv(newVar));
+    } else {
+   		printf("\nValue for '%s' is already set to '%s'.\nWould you like to reset this environment variable to '%s'?", newVar, getenv(newVar), value);
+       	char *temp = readline(" (y/n): ");
+
+        if (strcasecmp(temp, "y") == 0 || strcasecmp(temp, "yes") == 0) {
+          	setenv(newVar, value, 1);
+           	printf("Environment variable '%s' was set to the value '%s' successfully.\n\n", newVar, getenv(newVar));
+        } else {
+	           	printf("%s", "\n");
+       	}
+    }
 }
 
-int main(int argc, char **argv, char **envp) {
+void cd(char **args) {
+
+}
+
+void jobs(char **args) {
+
+}
+
+void executeExternalCommand(char **args) {
+
+}
+
+void executeCommand(char **args) {
+    if (strcmp("set", args[0]) == 0) {
+     	set(args);
+    } else if (strcmp("cd", args[0]) == 0) {
+    	cd(args);
+    } else if (strcmp("jobs", args[0]) == 0) {
+    	jobs(args);
+    } else {
+    	executeExternalCommand(args);
+    }
+}
+
+int main(int argc, char *argv[], char *envp[]) {
     // Initialize Variables
     char *input, prompt[128];
-    char *user = getenv("USER");
-    char *home = getenv("HOME");
-    char *path = getenv("PATH");
 
     // Check if SIGINT signal is received and set handler
     signal(SIGINT, handleSigInt);
 
     // Ininite Loop
     while(1) {
+    	char *user = getenv("USER");
+        char *home = getenv("HOME");
+        char *path = getenv("PATH");
+        
         // Setup the quash's prompt
         snprintf(prompt, sizeof(prompt), "%s : %s > ", user, getcwd(NULL, 1024));
         
@@ -102,28 +148,7 @@ int main(int argc, char **argv, char **envp) {
                     break;
                 }
 
-                // If the first token is 'set'
-                if (strcmp("set", tokens[0]) == 0) {
-                	// Get the variable to be set and the value to set it to
-                	char *newVar = tokens[1];
-                	char *value = tokens[2];
-
-            		setenv(newVar, value, 0);
-
-            		if (strcmp(value, getenv(newVar)) == 0) {
-            			printf("\nNew environment variable '%s' was set to the value '%s' successfully.\n\n", newVar, getenv(newVar));
-            		} else {
-            			printf("\nValue for '%s' was already set to '%s'.\nWould you like to reset this environment variable to '%s'?", newVar, getenv(newVar), value);
-            			char *temp = readline(" (y/n): ");
-
-            			if (strcasecmp(temp, "y") == 0 || strcasecmp(temp, "yes") == 0) {
-            				setenv(newVar, value, 1);
-            				printf("Environment variable '%s' was set to the value '%s' successfully.\n\n", newVar, getenv(newVar));
-            			} else {
-            				printf("%s", "\n");
-         					}
-            		}
-                }
+                executeCommand(tokens);
             }
         }
     }
