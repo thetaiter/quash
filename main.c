@@ -132,7 +132,7 @@ void printJobs() {
     }
 }
 
-void pipes(char **args) {
+void executePipe(char **args, int numArgs) {
 	int pipefd[2];
 	char *first_arg = args[0];
 	char *second_arg = args[2];
@@ -170,8 +170,23 @@ void pipes(char **args) {
 		}
 }
 
-void executeExternalCommand(char **args) {
+void executeExternalCommand(char ** args) {
+    pid_t pid = fork();
+    int status;
 
+    if (pid == 0) {
+        //printf("%s", "\n");
+        if (execlp(args[0], args[0], args[1], args[2], args[3], args[4], NULL) < 0) {
+            fprintf(stderr, "Invalid command.\n\n");
+            exit(-1);
+        }
+    } else {
+    	waitpid(pid, &status, 0);
+
+    	if (status == 1) {
+            fprintf(stderr, "%s", "FAIL");
+    	}
+    }
 }
 
 void executeCommand(char **args, int numArgs) {
@@ -181,11 +196,10 @@ void executeCommand(char **args, int numArgs) {
     	cd(args[1]);
     } else if (strcmp("jobs", args[0]) == 0) {
     	printJobs();
-    } else if (strcmp("|", args[1]) == 0) {
-	printf("pipes");
-    	pipes(args);
+    } else if (findStrPosition(args, numArgs, "|") > -1) {
+    	executePipe(args, numArgs);
     } else {
-    
+    	executeExternalCommand(args);
     }
 }
 
