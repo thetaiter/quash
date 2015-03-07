@@ -134,42 +134,30 @@ void printJobs() {
 
 void executePipe(char **args, int numArgs) {
 	int pipefd[2];
-	char *cur_input = strdup(args);
-	char *pch = strtok(args," \n=");
-	char *cur_command = strdup(pch);
-	 char *to_pipe = strchr(cur_input, '|');
-    	int pipe_loc = to_pipe - cur_input;
+	char *cur_in = strdup(*args);
+	char *first_arg = strtok(cur_in, "|");
+	char *second_arg = strtok(NULL, "\n");
+	
 	int pid;
-    
-	if (to_pipe != NULL) {
-		if (pipe(pipefd) == -1) {
-			perror("pipe");
-			exit(1);
-		}
-      
-		char * first_arg = strdup(cur_input);
-		char * second_arg = strdup(cur_input);
-		
-		strncpy(first_arg, &cur_input[0], pipe_loc);
-		first_arg[pipe_loc] = '\0';
-		strncpy(second_arg, &cur_input[pipe_loc+2], strlen(cur_input));
 		
 		pid_t pid_1, pid_2;
     
 		pid_1 = fork();
 		if (pid_1 == 0) {
 			dup2(pipefd[1], STDOUT_FILENO);
-			executeCommand(trimWhiteSpaces(first_arg));
+			close(pipefd[0]);
+			executeCommand(trimWhiteSpaces(first_arg), strlen(first_arg));
 			exit(0);
 		}
     
 		pid_2 = fork();
 		if (pid_2 == 0) {
 			dup2(pipefd[0], STDIN_FILENO);
-			executeCommand(trimWhiteSpaces(second_arg));
-			exit(0);
+			close(pipefd[1]);
+			executeCommand(trimWhiteSpaces(second_arg), strlen(second_arg));
 		}
-	}
+		close(pipefd[0]);
+		close(pipefd[1]);
 }
 
 void executeExternalCommand(char ** args) {
