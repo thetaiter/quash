@@ -2,14 +2,24 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
+#include <errno.h>
 #include <readline/readline.h>
+
+struct job {
+    int jid;
+    int pid;
+    char *com;
+};
+
+static int *numJobs;
+static struct job jobs[20];
 
 void handleSigInt(int sig) {
 	printf("\n\nSIGINT signal %i received. Quitting quash.\n\n", sig);
 	exit(0);
 }
 
-char *trimWhiteSpaces(char *str) {
+char* trimWhiteSpaces(char *str) {
     // Move string pointer to first character that is not a space
     while(isspace(*str)) {
         str++;
@@ -36,7 +46,7 @@ char *trimWhiteSpaces(char *str) {
     return str;
 }
 
-char **tokenize(char *input) {
+char** tokenize(char *input, int* numArgs) {
 	char **ret = NULL;
 	char *temp = strtok(input, " ");
 	int i, numSpaces = 0;
@@ -56,6 +66,7 @@ char **tokenize(char *input) {
 		}
 
 		ret[numSpaces-1] = temp;
+		*numArgs = (*numArgs) + 1;
 
 		temp = strtok(NULL, " =");
 	}
@@ -87,33 +98,60 @@ void set(char **args) {
     }
 }
 
-void cd(char **args) {
+int findStrPosition(char **strs, int numStrs, char* toFind) {
+    int i;
 
+    for (i = 0; i < numStrs; i++) {
+        if (strcmp(strs[i], toFind) == 0) {
+            return i;
+        }
+    }
+
+    return -1;
 }
 
-void jobs(char **args) {
+void cd(char *path) {
+    if (!path) {
+        if (chdir(getenv("HOME")) == -1) {
+            printf("\n'%s' in not a valid path.\n\n", strerror(errno));
+        }
+    } else {
+    	if (chdir(path) == -1) {
+            printf("\n'%s' in not a valid path.\n\n", strerror(errno));
+    	}
+    }
+}
 
+void printJobs() {
+    int i;
+
+    for (i = 0; i < *numJobs; i++) {
+        if (kill(jobs[i].pid, 0) == 0) {
+            printf("\nJob ID: %d\nPID: %d\nCommand: %s", jobs[i].jid, jobs[i].pid, jobs[i].com);
+        }
+    }
 }
 
 void executeExternalCommand(char **args) {
 
 }
 
-void executeCommand(char **args) {
+void executeCommand(char **args, int numArgs) {
     if (strcmp("set", args[0]) == 0) {
      	set(args);
     } else if (strcmp("cd", args[0]) == 0) {
-    	cd(args);
+    	cd(args[1]);
     } else if (strcmp("jobs", args[0]) == 0) {
-    	jobs(args);
+    	printJobs();
     } else {
-    	executeExternalCommand(args);
+    
     }
 }
 
 int main(int argc, char *argv[], char *envp[]) {
     // Initialize Variables
     char *input, prompt[128];
+    int numArgs = 0;
 
     // Check if SIGINT signal is received and set handler
     signal(SIGINT, handleSigInt);
@@ -123,9 +161,10 @@ int main(int argc, char *argv[], char *envp[]) {
     	char *user = getenv("USER");
         char *home = getenv("HOME");
         char *path = getenv("PATH");
-        
+        char *cwd = getcwd(NULL, 1024);
+
         // Setup the quash's prompt
-        snprintf(prompt, sizeof(prompt), "%s : %s > ", user, getcwd(NULL, 1024));
+        snprintf(prompt, sizeof(prompt), "%s : %s > ", user, cwd);
         
         // Read the user's input, displaying the prompt
         input = readline(prompt);
@@ -140,7 +179,7 @@ int main(int argc, char *argv[], char *envp[]) {
                 add_history(input);
 
                 // Tokenize input and place tokens into an array
-                char **tokens = tokenize(input);
+                char **tokens = tokenize(input, &numArgs);
 
                 // If the first token is equal to "exit" or "quit"
                 if (strcmp("exit", tokens[0]) == 0 || strcmp("quit", tokens[0]) == 0) {
@@ -148,9 +187,11 @@ int main(int argc, char *argv[], char *envp[]) {
                     break;
                 }
 
-                executeCommand(tokens);
+                executeCommand(tokens, numArgs);
             }
         }
+
+        numArgs = 0;
     }
 
     printf("%s", "\nThank you for using this quash program. Have a wonderful day!\n\n");
