@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <errno.h>
+#include <sys/mman.h>
 #include <readline/readline.h>
 
 struct job {
@@ -12,7 +13,7 @@ struct job {
 };
 
 static int *numJobs;
-static struct job jobs[20];
+static struct job jobs[50];
 
 void handleSigInt(int sig) {
 	printf("\n\nSIGINT signal %i received. Quitting quash.\n\n", sig);
@@ -127,10 +128,12 @@ void printJobs() {
 
     for (i = 0; i < *numJobs; i++) {
         if (kill(jobs[i].pid, 0) == 0) {
-            printf("\nJob ID: %d\nPID: %d\nCommand: %s", jobs[i].jid, jobs[i].pid, jobs[i].com);
+            printf("\nJob ID: %d\nPID: %d\nCommand: %s\n", jobs[i].jid, jobs[i].pid, jobs[i].com);
         }
     }
 }
+
+void executeCommand(char *input, char **args, int numArgs);
 
 void executePipe(char **args, int numArgs) {
 	int pipefd[2];
@@ -146,7 +149,9 @@ void executePipe(char **args, int numArgs) {
 		if (pid_1 == 0) {
 			dup2(pipefd[1], STDOUT_FILENO);
 			close(pipefd[0]);
-			executeCommand(trimWhiteSpaces(first_arg), strlen(first_arg));
+			int num = 0;
+			char **temp = tokenize(first_arg, &num);
+			executeCommand(trimWhiteSpaces(first_arg), temp, num);
 			exit(0);
 		}
     
@@ -154,20 +159,21 @@ void executePipe(char **args, int numArgs) {
 		if (pid_2 == 0) {
 			dup2(pipefd[0], STDIN_FILENO);
 			close(pipefd[1]);
-			executeCommand(trimWhiteSpaces(second_arg), strlen(second_arg));
+			int num = 0;
+			char **temp = tokenize(first_arg, &num);
+			executeCommand(trimWhiteSpaces(second_arg), temp, num);
 		}
 		close(pipefd[0]);
 		close(pipefd[1]);
 }
 
-void executeExternalCommand(char ** args) {
+void executeExternalCommand(char **args) {
     pid_t pid = fork();
     int status;
 
     if (pid == 0) {
-        //printf("%s", "\n");
-        if (execlp(args[0], args[0], args[1], args[2], args[3], args[4], NULL) < 0) {
-            fprintf(stderr, "Invalid command.\n\n");
+        if (execlp(args[0], args[0], args[1], args[2], args[3], args[4], args[5], NULL) < 0) {
+            fprintf(stderr, "\nInvalid command.\n\n");
             exit(-1);
         }
     } else {
@@ -179,8 +185,48 @@ void executeExternalCommand(char ** args) {
     }
 }
 
-void executeCommand(char **args, int numArgs) {
-    if (strcmp("set", args[0]) == 0) {
+void runInBackground(char *input, char **args, int numArgs) {
+    pid_t pid, sid;
+
+    pid = fork();
+    if (pid == 0) {
+        sid = setsid();
+        
+        if (sid < 0) {
+            printf("\nFailed to create child process.\n\n");
+            exit(EXIT_FAILURE);
+        }
+
+        printf("\n[%d] %d is running in the background\n\n", getpid(), *numJobs);
+
+        executeCommand(input, args, numArgs);
+
+        printf("\n[%d] done\n\n", getpid());
+
+        kill(getpid(), -9);
+        exit(0);
+    } else {
+    	struct job currentJob = {
+    		.jid = pid,
+    		.pid = *numJobs,
+    		.com = input
+    	};
+
+        int status;
+
+    	jobs[*numJobs] = currentJob;
+    	*numJobs = *numJobs + 1;
+
+        while(waitid(pid, NULL, WEXITED|WNOHANG) > 0) {
+        }
+    }
+}
+
+void executeCommand(char *input, char **args, int numArgs) {
+    if (*args[numArgs-1] == '&') {
+    	*args[numArgs-1] = 0;
+    	runInBackground(input, args, numArgs);
+    } else if (strcmp("set", args[0]) == 0) {
      	set(args);
     } else if (strcmp("cd", args[0]) == 0) {
     	cd(args[1]);
@@ -200,6 +246,9 @@ int main(int argc, char *argv[], char *envp[]) {
 
     // Check if SIGINT signal is received and set handler
     signal(SIGINT, handleSigInt);
+
+    numJobs = mmap(NULL, sizeof *numJobs, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    *numJobs = 0;
 
     // Ininite Loop
     while(1) {
@@ -232,7 +281,7 @@ int main(int argc, char *argv[], char *envp[]) {
                     break;
                 }
 
-                executeCommand(tokens, numArgs);
+                executeCommand(input, tokens, numArgs);
             }
         }
 
